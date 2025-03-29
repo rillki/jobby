@@ -1,0 +1,10 @@
+{
+	"authors": [
+		"rillki"
+	],
+	"copyright": "Copyright © 2025, rillki",
+	"description": "A simple task scheduler and executor supporting multiple job files.",
+	"license": "MIT",
+	"name": "jobby",
+    "targetPath": "bin"
+}
