@@ -32,6 +32,7 @@ NOTE:
     By default `~/.jobby/jobs.cfg` is used, unless a custom one is specified.
 }.format(version_);
 enum jobComponents = 8;
+enum commandDelimiter = "|";
 enum jobsFmt = q{jobby v%s -- A simple task scheduler and executor supporting multiple job files.
 ANNOTATIONS:
     r - repeat
@@ -140,7 +141,6 @@ void validate(in string jobFile)
     }
 
     // verify format
-    enum commandDelimiter = "|";
     bool statusOk = true;
     foreach (i, task; tasks)
     {
