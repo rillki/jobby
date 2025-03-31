@@ -5,9 +5,11 @@ import std.file : exists,
                   mkdir,
                   fileWrite = write,
                   readText;
-import std.string : splitLines;
+import std.array : split;
 import std.stdio : write;
+import std.string : splitLines, isNumeric, strip;
 import std.format : format;
+import std.algorithm : canFind, startsWith, any;
 import assol;
 
 // log header
@@ -126,9 +128,6 @@ void list(in string lockFile) {}
 
 void validate(in string jobFile)
 {
-    import std.array : array, split;
-    import std.algorithm : map, reduce, canFind;
-
     // split tasks to lines
     auto tasks = jobFile.
         readText.
@@ -137,36 +136,51 @@ void validate(in string jobFile)
     void logError(in string jobFile, in string task, in size_t line, in string msg = "")
     {
         log(msg);
-        logPrintf("%s:%s: \n  --> %s\n", jobFile.baseName, line, task);
+        logPrintf("%s:%s: \n    --> %s\n", jobFile.baseName, line, task);
     }
 
     // verify format
     enum commandDelimiter = "|";
+    bool statusOk = true;
     foreach (i, task; tasks)
     {
+        // skip comments
+        if (task.startsWith("#")) continue;
+
         // check items
         if (!task.canFind(commandDelimiter))
         {
-            logError(jobFile, task, i, "Command delimiter `%s` not found.".format(commandDelimiter));
+            logError(jobFile, task, i+1, "Command delimiter `%s` not found.".format(commandDelimiter));
+            statusOk = false;
+            continue;
         }
 
         // check for valid number of components
-        auto args = task.split(commandDelimiter)[0].split(" ");
-        if (args.length < jobComponents)
+        auto args = task.split(commandDelimiter)[0].strip.split(" ");
+        if (args.length < jobComponents - 1)
+        {
+            logError(jobFile, task, i+1,
+                "Schedule specified is invalid. There must be %s components before delimeter `%s`, but %s found: r y o d h m s | cmd".format(
+                    jobComponents - 1, commandDelimiter, args.length
+                ));
+            statusOk = false;
+            continue;
+        }
+        else if (args[0] != "*" && args[0].isNumeric)
         {
             logError(jobFile, task, i,
-                "Schedule specified is invalid. There must be 7 components in total before the `%s` delimiter.".format(commandDelimiter));
+                "First schedule component denotes repetition: y, o, d, w, h, m, s. It cannot be numeric.");
+            statusOk = false;
+            continue;
         }
-
-        // check each component data type
-        /*auto args = task.split("|")[0].split(" ");
-        if (args.length < jobComponents) {
-            //logf("Invalid `%s` format! See 'help-fmt' for more information.");
-            logf("Invalid format:");
-            logPrintf("%s:%s: \n\t%s\n", jobFile, i, task);
-        }*/
+        else if (args[1 .. $].any!(a => a != "*" && !a.isNumeric))
+        {
+            logError(jobFile, task, i+1,
+                "Time components of schedule starting with `y` up to `cmd` must be numeric: r y o d h m s cmd");
+            statusOk = false;
+            continue;
+        }
     }
+
+    if (statusOk) log("All good.");
 }
-
-
-//
