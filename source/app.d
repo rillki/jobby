@@ -98,7 +98,7 @@ void main(string[] args)
 
     // parse command line arguments
     string command = args[1];
-    string jobFile = args.length > 2 ? args[2] : defaultJobFile;
+    string jobFile = args.length > 2 ? args[2].expandTilde : defaultJobFile;
     switch (command)
     {
         case "serve":
