@@ -183,4 +183,5 @@ void validate(in string jobFile)
     }
 
     if (statusOk) log("All good.");
+    else log("Maybe see 'help-fmt' for more information.");
 }
