@@ -6,7 +6,7 @@ import std.file : exists,
                   fileWrite = write,
                   readText;
 import std.array : split;
-import std.stdio : write;
+import std.stdio : write, writef;
 import std.string : splitLines, isNumeric, strip;
 import std.format : format;
 import std.algorithm : canFind, startsWith, any;
@@ -98,20 +98,27 @@ void main(string[] args)
 
     // parse command line arguments
     string command = args[1];
-    string jobFile = args.length > 2 ? args[2].expandTilde : defaultJobFile;
+    string argFileOrPid = args.length > 2 ? args[2].expandTilde : defaultJobFile;
+    if (!argFileOrPid.isNumeric && !argFileOrPid.exists)
+    {
+        logf("File does not exist: <%s>!\n", argFileOrPid);
+        return;
+    }
+
+    // execute command
     switch (command)
     {
         case "serve":
-            serve(jobFile);
+            serve(argFileOrPid);
             break;
         case "stop":
-            stop(jobFile);
+            stop(argFileOrPid);
             break;
         case "list":
             list(lockFile);
             break;
         case "validate":
-            validate(jobFile);
+            validate(argFileOrPid);
             break;
         case "help":
             write(usage);
@@ -124,8 +131,30 @@ void main(string[] args)
 }
 
 void serve(in string jobFile) {}
+
 void stop(in string jobFileOrPid) {}
-void list(in string lockFile) {}
+
+void list(in string lockFile) {
+    // split tasks to lines
+    auto lines = lockFile.
+        readText.
+        splitLines;
+
+    // no jobs are running
+    if (!lines.length)
+    {
+        log("No jobs are running!");
+        return;
+    }
+
+    // output running job files
+    writef("%5s\t%s\n", "PID", "Jobs file");
+    foreach (i; lines)
+    {
+        auto s = i.strip.split(" ");
+        writef("%5s\t%s\n", s[0], s[1]);
+    }
+}
 
 void validate(in string jobFile)
 {
