@@ -1,15 +1,16 @@
 module app;
 
+import std.conv : to;
 import std.path : expandTilde, baseName;
 import std.file : exists,
                   mkdir,
                   fileWrite = write,
                   readText;
-import std.array : split;
+import std.array : split, array, join;
 import std.stdio : write, writef;
 import std.string : splitLines, isNumeric, strip;
 import std.format : format;
-import std.algorithm : canFind, startsWith, any;
+import std.algorithm : canFind, startsWith, any, filter;
 import assol;
 
 // log header
@@ -130,15 +131,60 @@ void main(string[] args)
     }
 }
 
-void serve(in string jobFile) {}
+struct Task
+{
+    char repeat = '*';
+    int year, month, day, hour, minute, second;
+    string cmd;
+
+    static Task[] parseFile(in string jobFile)
+    {
+        // read file and split tasks to lines
+        auto lines = jobFile
+            .readText
+            .splitLines
+            .filter!(x => x[0] != '#')
+            .array;
+
+        // no tasks found
+        if (!lines.length) return [];
+
+        // parse jobs
+        Task[] tasks;
+        foreach (line; lines)
+        {
+            auto args = line.strip.split("|");
+            auto schedule = args[0].strip.split(" ");
+            auto commands = args[1].strip;
+            tasks ~= Task(
+                repeat: schedule[0][0],
+                year:   schedule[1] == "*" ? -1 : schedule[1].to!uint,
+                month:  schedule[2] == "*" ? -1 : schedule[2].to!uint,
+                day:    schedule[3] == "*" ? -1 : schedule[3].to!uint,
+                hour:   schedule[4] == "*" ? -1 : schedule[4].to!uint,
+                minute: schedule[5] == "*" ? -1 : schedule[5].to!uint,
+                second: schedule[6] == "*" ? -1 : schedule[6].to!uint,
+                cmd:    commands,
+            );
+        }
+
+        return tasks;
+    }
+}
+
+void serve(in string jobFile)
+{
+    auto tasks = Task.parseFile(jobFile);
+    write(tasks, "\n");
+}
 
 void stop(in string jobFileOrPid) {}
 
 void list(in string lockFile) {
     // split tasks to lines
-    auto lines = lockFile.
-        readText.
-        splitLines;
+    auto lines = lockFile
+        .readText
+        .splitLines;
 
     // no jobs are running
     if (!lines.length)
@@ -159,9 +205,9 @@ void list(in string lockFile) {
 void validate(in string jobFile)
 {
     // split tasks to lines
-    auto tasks = jobFile.
-        readText.
-        splitLines;
+    auto tasks = jobFile
+        .readText
+        .splitLines;
 
     void logError(in string jobFile, in string task, in size_t line, in string msg = "")
     {
