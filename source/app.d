@@ -1,5 +1,8 @@
 module app;
 
+import core.time : dur;
+import core.thread : Thread;
+
 import std.conv : to;
 import std.path : expandTilde, baseName;
 import std.file : exists,
@@ -10,7 +13,9 @@ import std.array : split, array, join;
 import std.stdio : write, writef;
 import std.string : splitLines, isNumeric, strip;
 import std.format : format;
+import std.datetime : Clock, DayOfWeek, SysTime;
 import std.algorithm : canFind, startsWith, any, filter;
+
 import assol;
 
 // log header
@@ -23,6 +28,7 @@ enum version_ = "1.0.0";
 enum usage = q{jobby v%s -- A simple task scheduler and executor supporting multiple job files.
 USAGE: jobby [command] <jobs.cfg>
 COMMANDS:
+      run  run with custom job.cfg
     serve  launch in background with custom jobs.cfg
      stop  stop daemon identified with custom jobs.cfg or PID
      list  list running jobs
@@ -109,6 +115,9 @@ void main(string[] args)
     // execute command
     switch (command)
     {
+        case "run":
+            run(argFileOrPid);
+            break;
         case "serve":
             serve(argFileOrPid);
             break;
@@ -133,12 +142,19 @@ void main(string[] args)
 
 struct Task
 {
-    char repeat = '*';
+    // this field is required for tasks that should be executed only once every time `jobby` is launched
+    bool ignore = false;
+
+    char repeat;
     int year, month, day, hour, minute, second;
     string cmd;
+    SysTime lastRun;
 
     static Task[] parseFile(in string jobFile)
     {
+        // ensure job file format is correct
+        if (!validate(jobFile, false)) return null;
+
         // read file and split tasks to lines
         auto lines = jobFile
             .readText
@@ -149,7 +165,7 @@ struct Task
         // no tasks found
         if (!lines.length) return [];
 
-        // parse jobs
+        // parse tasks from jobFile
         Task[] tasks;
         foreach (line; lines)
         {
@@ -170,18 +186,78 @@ struct Task
 
         return tasks;
     }
+
+    bool shouldRun()
+    {
+        // get current time
+        auto currTime = Clock.currTime();
+
+        // check if task has already been executed
+        //if (lastRun == currTime || ignore) return false;
+        if (ignore ||
+            (repeat == 'y' && lastRun.year == currTime.year) ||
+            (repeat == 'o' && lastRun.month == currTime.month) ||
+            (repeat == 'w' && lastRun.dayOfWeek == currTime.dayOfWeek) ||
+            (repeat == 'd' && lastRun.day == currTime.day) ||
+            (repeat == 'h' && lastRun.hour == currTime.hour) ||
+            (repeat == 'm' && lastRun.minute == currTime.minute) ||
+            (repeat == 's' && lastRun.second == currTime.second)
+        ) return false;
+
+        // check if we should run
+        immutable itShouldRun =
+            year == (year < 0 ? year : currTime.year) &&
+            month == (month < 0 ? month : cast(typeof(month))currTime.month) &&
+            day == (day < 0 ? day : (
+                repeat == 'w' ?
+                (currTime.dayOfWeek == DayOfWeek.sun ? 7 : cast(typeof(day))currTime.dayOfWeek + 1) :
+                currTime.day
+            )) &&
+            hour == (hour < 0 ? hour : currTime.hour) &&
+            minute == (minute < 0 ? minute : currTime.minute) &&
+            second == (second < 0 ? second : currTime.second);
+
+        // update last run
+        if (itShouldRun)
+        {
+            lastRun = currTime;
+            if (repeat == '*') ignore = true;
+        }
+
+        return itShouldRun;
+    }
+}
+
+void run(in string jobFile)
+{
+    // parse tasks
+    auto tasks = Task.parseFile(jobFile);
+    if (!tasks)
+    {
+        logf("Parsed file `%s` is invalid. Try 'validate' for more information.\n", jobFile);
+        return;
+    }
+
+    // loop
+    while (true)
+    {
+        foreach (ref task; tasks)
+        {
+            if (task.shouldRun) logf("Running: %s\n", task);
+        }
+        Thread.sleep(dur!"seconds"(1));
+    }
 }
 
 void serve(in string jobFile)
 {
-    auto tasks = Task.parseFile(jobFile);
-    write(tasks, "\n");
+    // TODO: implement
 }
 
 void stop(in string jobFileOrPid) {}
 
 void list(in string lockFile) {
-    // split tasks to lines
+    // split jobs to lines
     auto lines = lockFile
         .readText
         .splitLines;
@@ -202,7 +278,7 @@ void list(in string lockFile) {
     }
 }
 
-void validate(in string jobFile)
+bool validate(in string jobFile, in bool verbose = true)
 {
     // split tasks to lines
     auto tasks = jobFile
@@ -211,8 +287,11 @@ void validate(in string jobFile)
 
     void logError(in string jobFile, in string task, in size_t line, in string msg = "")
     {
-        log(msg);
-        logPrintf("%s:%s: \n    --> %s\n", jobFile.baseName, line, task);
+        if (verbose)
+        {
+            log(msg);
+            logPrintf("%s:%s: \n    --> %s\n\n", jobFile.baseName, line, task);
+        }
     }
 
     // verify format
@@ -257,6 +336,11 @@ void validate(in string jobFile)
         }
     }
 
-    if (statusOk) log("All good.");
-    else log("Maybe see 'help-fmt' for more information.");
+    if (verbose)
+    {
+        if (statusOk) log("All good.");
+        else log("Maybe see 'help-fmt' for more information.");
+    }
+
+    return statusOk;
 }
