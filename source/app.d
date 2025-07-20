@@ -62,18 +62,23 @@ EXAMPLE:
     s * * * * * * | echo "Execute every second."
     s * * * * * 5 | echo "Execute every 5 seconds."
     m * * * * * * | echo "Execute every minute."
+    m * * * * 3 * | echo "Execute every 3 minutes."
     m * * * * * 5 | echo "Execute every 5th second of a minute."
     h * * * * * * | echo "Execute every hour."
+    h * * * 6 * * | echo "Execute every 6 hours."
     h * * * * 5 * | echo "Execute every hour at 5th minute."
     h * * * * 5 7 | echo "Execute every hour at 5th minute and 7th second of that hour."
     d * * * * * * | echo "Execute every day at 00:00:00."
+    d * * 4 * * * | echo "Execute every 4 days."
     d * * * 8 * * | echo "Execute every day at 08:00:00."
     d * * * 8 5 * | echo "Execute every day at 08:05:00."
     w * * * * * * | echo "Execute every monday at 00:00:00."
-    w * * 1 * * * | echo "Execute every monday at 00:00:00. Weekdays numeration starts with Monday (1) - Sunday (7)."
+    w * * 2 * * * | echo "Execute every Tuesday at 00:00:00. Weekdays numeration starts with Monday (1) - Sunday (7)."
     o * * * * * * | echo "Execute at the begining of every month at 00:00:00."
+    o * 3 * * * * | echo "Execute every 3 months."
     o * * 9 8 * * | echo "Execute every 9th day of month at 08:00:00."
     y * * * * * * | echo "Execute on 1st of January every year at 00:00:00."
+    y 2 * * * * * | echo "Execute every 2 years on 1st of January at 00:00:00."
     y * 2 9 8 7 5 | echo "Execute on 9th of February every year at 08:07:05. Months numeration starts with January (1) - December (12)."
     * 2027 2 9 8 7 5 | echo "Execute once on 2027-02-09 at 08:07:05."
     ```
@@ -193,40 +198,232 @@ struct Task
         // get current time
         auto currTime = Clock.currTime();
 
-        // check if task has already been executed
-        // if (lastRun == currTime || ignore) return false;
-        if (ignore ||
-            (repeat == 'y' && lastRun.year == currTime.year) ||
-            (repeat == 'o' && lastRun.month == currTime.month) ||
-            (repeat == 'w' && lastRun.dayOfWeek == currTime.dayOfWeek) ||
-            (repeat == 'd' && lastRun.day == currTime.day) ||
-            (repeat == 'h' && lastRun.hour == currTime.hour) ||
-            (repeat == 'm' && lastRun.minute == currTime.minute) ||
-            (repeat == 's' && lastRun.second == currTime.second)
-        ) return false;
+        // check if non-repeating task has been executed already
+        // (a task that runs only once every startup if time matches)
+        if (ignore) return false;
 
-        // check if we should run
-        immutable itShouldRun =
-            year == (year < 0 ? year : currTime.year) &&
-            month == (month < 0 ? month : cast(typeof(month))currTime.month) &&
-            day == (day < 0 ? day : (
-                repeat == 'w' ?
-                (currTime.dayOfWeek == DayOfWeek.sun ? 7 : cast(typeof(day))currTime.dayOfWeek + 1) :
-                currTime.day
-            )) &&
-            hour == (hour < 0 ? hour : currTime.hour) &&
-            minute == (minute < 0 ? minute : (repeat == 'm' && currTime.minute != 0 && currTime.minute % minute == 0 ? minute : currTime.minute)) &&
-            second == (second < 0 ? second : (repeat == 's' && currTime.second != 0 && currTime.second % second == 0 ? second : currTime.second));
+        /*
+            REPEATING TASKS
+            (tasks that run repeatedly with 'r'-field set to specific value)
+        */
+
+        // prevent running tasks multiple times in the same time unit
+        // (for the tasks that have already been executed at least once)
+        if (lastRun != SysTime.init) switch (repeat)
+        {
+            case 's':
+                if ((currTime - lastRun).total!"seconds" == 0) return false;
+                break;
+            case 'm':
+                if ((currTime - lastRun).total!"minutes" == 0) return false;
+                break;
+            case 'h':
+                if ((currTime - lastRun).total!"hours" == 0) return false;
+                break;
+            case 'd':
+                if ((currTime - lastRun).total!"days" == 0) return false;
+                break;
+            case 'w':
+                if (lastRun.dayOfWeek == currTime.dayOfWeek && 
+                    (currTime - lastRun).total!"days" < 7) 
+                    return false;
+                break;
+            case 'o':
+                if (lastRun.year == currTime.year && 
+                    lastRun.month == currTime.month) 
+                    return false;
+                break;
+            case 'y':
+                if (lastRun.year == currTime.year) 
+                    return false;
+                break;
+            default: // one-time execution
+                break;
+        }
+
+        // check if time matches the schedule
+        // (task should run)
+        bool timeMatches = false;
+        switch (repeat)
+        {
+            case '*': // one-time execution - exact time match
+                timeMatches = 
+                    (year < 0 || currTime.year == year) &&
+                    (month < 0 || cast(int)currTime.month == month) &&
+                    (day < 0 || currTime.day == day) &&
+                    (hour < 0 || currTime.hour == hour) &&
+                    (minute < 0 || currTime.minute == minute) &&
+                    (second < 0 || currTime.second == second);
+                break;
+
+            case 's': // every second (with optional repetition every N seconds)
+                if (second > 0)
+                {
+                    // execute every N seconds: check if enough time has passed since last run
+                    if (lastRun == SysTime.init)
+                    {
+                        // first run - execute immediately
+                        timeMatches = true;
+                    }
+                    else
+                    {
+                        // check if N seconds have passed since last run
+                        timeMatches = (currTime - lastRun).total!"seconds" >= second;
+                    }
+                }
+                else
+                {
+                    // execute every second
+                    timeMatches = true;
+                }
+                break;
+
+            case 'm': // every minute
+                if (minute > 0)
+                {
+                    // execute every N minutes at specified second (or any second if not specified)
+                    if (lastRun == SysTime.init)
+                    {
+                        // first run - check if we're at the right second
+                        timeMatches = (second < 0 || currTime.second == second);
+                    }
+                    else
+                    {
+                        // check if N minutes have passed and we're at the right second
+                        timeMatches = (currTime - lastRun).total!"minutes" >= minute &&
+                                    (second < 0 || currTime.second == second);
+                    }
+                }
+                else
+                {
+                    // execute every minute at specified second (or at second 0 if not specified)
+                    timeMatches = (second < 0 ? currTime.second == 0 : currTime.second == second);
+                }
+                break;
+
+            case 'h': // every hour
+                if (hour > 0)
+                {
+                    // execute every N hours at specified minute:second
+                    if (lastRun == SysTime.init)
+                    {
+                        timeMatches = (minute < 0 ? currTime.minute == 0 : currTime.minute == minute) &&
+                                    (second < 0 ? currTime.second == 0 : currTime.second == second);
+                    }
+                    else
+                    {
+                        timeMatches = (currTime - lastRun).total!"hours" >= hour &&
+                                    (minute < 0 ? currTime.minute == 0 : currTime.minute == minute) &&
+                                    (second < 0 ? currTime.second == 0 : currTime.second == second);
+                    }
+                }
+                else
+                {
+                    // execute every hour at specified minute:second (or 00:00 if not specified)
+                    timeMatches = (minute < 0 ? currTime.minute == 0 : currTime.minute == minute) &&
+                                (second < 0 ? currTime.second == 0 : currTime.second == second);
+                }
+                break;
+
+            case 'd': // every day
+                if (day > 0)
+                {
+                    // execute every N days at specified time
+                    if (lastRun == SysTime.init)
+                    {
+                        timeMatches = (hour < 0 ? currTime.hour == 0 : currTime.hour == hour) &&
+                                    (minute < 0 ? currTime.minute == 0 : currTime.minute == minute) &&
+                                    (second < 0 ? currTime.second == 0 : currTime.second == second);
+                    }
+                    else
+                    {
+                        timeMatches = (currTime - lastRun).total!"days" >= day &&
+                                    (hour < 0 ? currTime.hour == 0 : currTime.hour == hour) &&
+                                    (minute < 0 ? currTime.minute == 0 : currTime.minute == minute) &&
+                                    (second < 0 ? currTime.second == 0 : currTime.second == second);
+                    }
+                }
+                else
+                {
+                    // execute every day at specified time (or 00:00:00 if not specified)
+                    timeMatches = (hour < 0 ? currTime.hour == 0 : currTime.hour == hour) &&
+                                (minute < 0 ? currTime.minute == 0 : currTime.minute == minute) &&
+                                (second < 0 ? currTime.second == 0 : currTime.second == second);
+                }
+                break;
+
+            case 'w': // every week (weekday-based)
+                {
+                    // convert Sunday=0 to Sunday=7 for consistency with config
+                    auto currentWeekday = currTime.dayOfWeek == DayOfWeek.sun ? 7 : cast(int)currTime.dayOfWeek;
+                    auto targetWeekday = day < 0 ? 1 : day; // default to Monday if not specified
+                    
+                    // every week on specified weekday
+                    timeMatches = (currentWeekday == targetWeekday) &&
+                                  (hour < 0 ? currTime.hour == 0 : currTime.hour == hour) &&
+                                  (minute < 0 ? currTime.minute == 0 : currTime.minute == minute) &&
+                                  (second < 0 ? currTime.second == 0 : currTime.second == second);
+                }
+                break;
+
+            case 'o': // every month
+                if (month > 0 && lastRun != SysTime.init)
+                {
+                    // execute every N months on specified day at specified time
+                    auto monthsPassed = (currTime.year - lastRun.year) * 12 + (cast(int)currTime.month - cast(int)lastRun.month);
+                    timeMatches = monthsPassed >= month &&
+                                (day < 0 ? currTime.day == 1 : currTime.day == day) &&
+                                (hour < 0 ? currTime.hour == 0 : currTime.hour == hour) &&
+                                (minute < 0 ? currTime.minute == 0 : currTime.minute == minute) &&
+                                (second < 0 ? currTime.second == 0 : currTime.second == second);
+                }
+                else
+                {
+                    // execute every month on specified day at specified time (or 1st at 00:00:00)
+                    timeMatches = (day < 0 ? currTime.day == 1 : currTime.day == day) &&
+                                (hour < 0 ? currTime.hour == 0 : currTime.hour == hour) &&
+                                (minute < 0 ? currTime.minute == 0 : currTime.minute == minute) &&
+                                (second < 0 ? currTime.second == 0 : currTime.second == second);
+                }
+                break;
+                
+            case 'y': // every year
+                if (year > 0 && lastRun != SysTime.init)
+                {
+                    // execute every N years on specified date/time
+                    timeMatches = (currTime.year - lastRun.year) >= year &&
+                                (month < 0 ? cast(int)currTime.month == 1 : cast(int)currTime.month == month) &&
+                                (day < 0 ? currTime.day == 1 : currTime.day == day) &&
+                                (hour < 0 ? currTime.hour == 0 : currTime.hour == hour) &&
+                                (minute < 0 ? currTime.minute == 0 : currTime.minute == minute) &&
+                                (second < 0 ? currTime.second == 0 : currTime.second == second);
+                }
+                else
+                {
+                    // execute every year on specified date/time (or Jan 1st 00:00:00)
+                    timeMatches = (month < 0 ? cast(int)currTime.month == 1 : cast(int)currTime.month == month) &&
+                                (day < 0 ? currTime.day == 1 : currTime.day == day) &&
+                                (hour < 0 ? currTime.hour == 0 : currTime.hour == hour) &&
+                                (minute < 0 ? currTime.minute == 0 : currTime.minute == minute) &&
+                                (second < 0 ? currTime.second == 0 : currTime.second == second);
+                }
+                break;
+                
+            default:
+                timeMatches = false;
+                break;
+        }
 
         // update last run
-        if (itShouldRun)
+        if (timeMatches)
         {
             lastRun = currTime;
             if (repeat == '*') ignore = true;
         }
-
-        return itShouldRun;
+        
+        return timeMatches;
     }
+
 }
 
 void run(in string jobFile)
@@ -235,7 +432,7 @@ void run(in string jobFile)
     auto tasks = Task.parseFile(jobFile);
     if (!tasks)
     {
-        logf("Parsed file `%s` is invalid. Try 'validate' for more information.\n", jobFile);
+        logf("The parsed file `%s` is invalid. Try 'validate' for more information.\n", jobFile);
         return;
     }
 
@@ -322,8 +519,8 @@ bool validate(in string jobFile, in bool verbose = true)
         if (args.length < jobComponents - 1)
         {
             logError(jobFile, task, i+1,
-                "Schedule specified is invalid. There must be %s components before delimeter `%s`, but %s found: r y o d h m s | cmd".format(
-                    jobComponents - 1, commandDelimiter, args.length
+                "Schedule specified is invalid. Found only %s components before the delimeter `%s`, but %s is required: r y o d h m s | cmd".format(
+                    args.length, commandDelimiter, jobComponents - 1
                 ));
             statusOk = false;
             continue;
