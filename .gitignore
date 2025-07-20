@@ -3,6 +3,7 @@ bin/
 lib/
 __internal/
 .DS*
+.vscode
 
 # Compiled Object files
 *.o
