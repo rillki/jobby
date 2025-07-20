@@ -60,6 +60,7 @@ EXAMPLE:
     * * * * * * * | echo "Execute once when `jobby` is launched."
     * * * * 8 7 5 | echo "Execute once at 08:07:05. Ignore the next day, unless `jobby` is restarted."
     s * * * * * * | echo "Execute every second."
+    s * * * * * 5 | echo "Execute every 5 seconds."
     m * * * * * * | echo "Execute every minute."
     m * * * * * 5 | echo "Execute every 5th second of a minute."
     h * * * * * * | echo "Execute every hour."
@@ -128,7 +129,7 @@ void main(string[] args)
             list(lockFile);
             break;
         case "validate":
-            validate(argFileOrPid);
+            validate(argFileOrPid); // @suppress(dscanner.unused_result)
             break;
         case "help":
             write(usage);
@@ -193,7 +194,7 @@ struct Task
         auto currTime = Clock.currTime();
 
         // check if task has already been executed
-        //if (lastRun == currTime || ignore) return false;
+        // if (lastRun == currTime || ignore) return false;
         if (ignore ||
             (repeat == 'y' && lastRun.year == currTime.year) ||
             (repeat == 'o' && lastRun.month == currTime.month) ||
@@ -214,8 +215,8 @@ struct Task
                 currTime.day
             )) &&
             hour == (hour < 0 ? hour : currTime.hour) &&
-            minute == (minute < 0 ? minute : currTime.minute) &&
-            second == (second < 0 ? second : currTime.second);
+            minute == (minute < 0 ? minute : (repeat == 'm' && currTime.minute != 0 && currTime.minute % minute == 0 ? minute : currTime.minute)) &&
+            second == (second < 0 ? second : (repeat == 's' && currTime.second != 0 && currTime.second % second == 0 ? second : currTime.second));
 
         // update last run
         if (itShouldRun)
@@ -243,7 +244,7 @@ void run(in string jobFile)
     {
         foreach (ref task; tasks)
         {
-            if (task.shouldRun) logf("Running: %s\n", task);
+            if (task.shouldRun) logf("Running: %s\n", task); // TODO: implement command execution
         }
         Thread.sleep(dur!"seconds"(1));
     }
@@ -251,7 +252,7 @@ void run(in string jobFile)
 
 void serve(in string jobFile)
 {
-    // TODO: implement
+    // TODO: implement serving in a separate process
 }
 
 void stop(in string jobFileOrPid) {}
