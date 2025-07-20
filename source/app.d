@@ -10,10 +10,10 @@ import std.stdio : write, writef;
 import std.string : splitLines, isNumeric, strip;
 import std.format : format;
 import std.algorithm : canFind, startsWith, any;
-import assol;
+import asol;
 
 // log header
-enum lh = "#jobby: ";
+enum lh = "jobby :: ";
 auto log(Args...)(Args args) => logPrint!(" ", "\n", lh)(args);
 auto logf(Args...)(in string format, Args args) => logPrintf!(lh)(format, args);
 
@@ -45,7 +45,7 @@ ANNOTATIONS:
     s - second
     cmd - command
 REPEATITION:
-    r - stands for repetition. Substiture the value to execute task every y, o, d, h, m, s.
+    r - stands for repetition. Substitute the value to execute task every y, o, d, h, m, s.
 EXAMPLE:
     There are %s components in total in the configuration file. It follows the following format:
     ```jobs.cfg
@@ -64,14 +64,14 @@ EXAMPLE:
     w * * * * * * | echo "Execute every monday at 00:00:00."
     w * * 1 * * * | echo "Execute every monday at 00:00:00. Weekdays numeration starts with Monday (1) - Sunday (7)."
     o * * * * * * | echo "Execute at the begining of every month at 00:00:00."
-    o * * 9 8 * * | echo "Execute every 9th of month at 08:00:00."
+    o * * 9 8 * * | echo "Execute every 9th day of month at 08:00:00."
     y * * * * * * | echo "Execute on 1st of January every year at 00:00:00."
     y * 2 9 8 7 5 | echo "Execute on 9th of February every year at 08:07:05. Months numeration starts with January (1) - December (12)."
     * 2027 2 9 8 7 5 | echo "Execute once on 2027-02-09 at 08:07:05."
     ```
     When repetition is set to weekdays `r=w`, the day field `d` is treated as weekday (Monday to Sunday 1-7).
     Otherwise the day field is treated as month day.
-}.format(version_, jobComponents);
+}.format(version_, jobComponents); // @suppress(dscanner.style.long_line)
 
 // jobby initialization
 string configDir, defaultJobFile, lockFile;
@@ -162,6 +162,7 @@ void validate(in string jobFile)
     auto tasks = jobFile.
         readText.
         splitLines;
+    bool statusOk = true;
 
     void logError(in string jobFile, in string task, in size_t line, in string msg = "")
     {
@@ -169,9 +170,15 @@ void validate(in string jobFile)
         logPrintf("%s:%s: \n    --> %s\n", jobFile.baseName, line, task);
     }
 
+    // check if file is empty
+    if (!tasks) 
+    {
+        log("No tasks specified on job file:", jobFile);
+        statusOk = false;
+    }
+
     // verify format
-    bool statusOk = true;
-    foreach (i, task; tasks)
+    if (statusOk) foreach (i, task; tasks)
     {
         // skip comments
         if (task.startsWith("#")) continue;
