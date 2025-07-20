@@ -302,13 +302,6 @@ bool validate(in string jobFile, in bool verbose = true)
         statusOk = false;
     }
 
-    // check if file is empty
-    if (!tasks) 
-    {
-        log("No tasks specified on job file:", jobFile);
-        statusOk = false;
-    }
-
     // verify format
     if (statusOk) foreach (i, task; tasks)
     {
