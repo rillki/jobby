@@ -6,6 +6,7 @@ import core.thread : Thread;
 import std.conv : to;
 import std.path : expandTilde, 
                   baseName, 
+                  buildPath,
                   setExtension, 
                   absolutePath;
 import std.file : exists,
@@ -462,6 +463,16 @@ struct LockedJob
     {
         return jobs.any!(job => job.pid == pidOrJobFile || job.jobFile == pidOrJobFile);
     }
+
+    static void add(in string pid, in string jobFile)
+    {
+        // TODO: 
+    }
+
+    static void remove(in string pidOrJobFile)
+    {
+        // TODO: 
+    }
 }
 
 void executeCommand(in string command)
@@ -514,6 +525,8 @@ void serve(in string jobFile)
     // setup
     immutable executablePath = thisExePath();
     immutable args = [executablePath, "run", jobFile.absolutePath()];
+    immutable logFilePath = configDir.buildPath(jobFile.baseName.setExtension(".log"));
+    auto logFile = File(logFilePath, "a");
 
 
     // TODO: implement serving in a separate process
