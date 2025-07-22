@@ -503,13 +503,11 @@ void serve(in string jobFile)
 void stop(in string jobFileOrPid) {}
 
 void list(in string lockFile) {
-    // split jobs to lines
-    auto lines = lockFile
-        .readText
-        .splitLines;
+    // parse
+    auto jobs = LockedJob.parseFile(lockFile);
 
     // no jobs are running
-    if (!lines.length)
+    if (!jobs.length)
     {
         log("No jobs are running!");
         return;
@@ -517,10 +515,9 @@ void list(in string lockFile) {
 
     // output running job files
     writef("%5s\t%s\n", "PID", "Jobs file");
-    foreach (i; lines)
+    foreach (job; jobs)
     {
-        auto s = i.strip.split(" ");
-        writef("%5s\t%s\n", s[0], s[1]);
+        writef("%5s\t%s\n", job.pid, job.jobFile);
     }
 }
 
@@ -544,7 +541,7 @@ bool validate(in string jobFile, in bool verbose = true)
     // check if file is empty
     if (!tasks) 
     {
-        log("No tasks specified on job file:", jobFile);
+        log("No tasks found in the job file:", jobFile);
         statusOk = false;
     }
 
