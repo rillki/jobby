@@ -12,7 +12,7 @@ import std.file : exists,
 import std.array : split, array, join;
 import std.stdio : write, writef;
 import std.string : splitLines, isNumeric, strip;
-import std.format : format;
+import std.format : format, formattedRead;
 import std.process : spawnShell;
 import std.datetime : Clock, DayOfWeek, SysTime;
 import std.algorithm : canFind, startsWith, any, filter;
@@ -423,6 +423,40 @@ struct Task
         }
         
         return timeMatches;
+    }
+}
+
+struct LockedJob
+{
+    string pid, jobFile;
+
+    static LockedJob[] parseFile(in string lockFile)
+    {
+        // read file and split jobs to lines
+        auto lines = lockFile
+            .readText
+            .splitLines
+            .filter!(x => x[0] != '#')
+            .array;
+
+        // no jobs found
+        if (!lines.length) return [];
+
+        // parse jobs from lockFile
+        LockedJob[] jobs;
+        foreach (line; lines)
+        {
+            LockedJob job;
+            formattedRead(line, "%s %s", job.pid, job.jobFile);
+            jobs ~= job;
+        }
+
+        return jobs;
+    }
+
+    static bool isLocked(in LockedJob[] jobs, in string pidOrJobFile)
+    {
+        return jobs.any!(job => job.pid == pidOrJobFile || job.jobFile == pidOrJobFile);
     }
 }
 
