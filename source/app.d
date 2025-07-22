@@ -4,11 +4,15 @@ import core.time : dur;
 import core.thread : Thread;
 
 import std.conv : to;
-import std.path : expandTilde, baseName;
+import std.path : expandTilde, 
+                  baseName, 
+                  setExtension, 
+                  absolutePath;
 import std.file : exists,
                   mkdir,
                   fileWrite = write,
-                  readText;
+                  readText,
+                  thisExePath;
 import std.array : split, array, join;
 import std.stdio : write, writef;
 import std.string : splitLines, isNumeric, strip;
@@ -497,13 +501,28 @@ void run(in string jobFile)
 
 void serve(in string jobFile)
 {
+    // parse running jobs
+    auto jobs = LockedJob.parseFile(lockFile);
+
+    // check if the current job is already running
+    if (LockedJob.isLocked(jobs, jobFile))
+    {
+        log("This job is already running! Doing nothing.");
+        return;
+    }
+
+    // setup
+    immutable executablePath = thisExePath();
+    immutable args = [executablePath, "run", jobFile.absolutePath()];
+
+
     // TODO: implement serving in a separate process
 }
 
 void stop(in string jobFileOrPid) {}
 
 void list(in string lockFile) {
-    // parse
+    // parse running jobs
     auto jobs = LockedJob.parseFile(lockFile);
 
     // no jobs are running
