@@ -19,7 +19,7 @@ import std.array : split, array, join;
 import std.stdio : write, writef, File;
 import std.string : splitLines, isNumeric, strip;
 import std.format : format, formattedRead;
-import std.process : spawnShell, spawnProcess;
+import std.process : spawnShell, spawnProcess, tryWait, Config;
 import std.datetime : Clock, DayOfWeek, SysTime;
 import std.algorithm : canFind, startsWith, any, filter, map;
 
@@ -462,10 +462,13 @@ struct LockedJob
 
     static void writeFile(in LockedJob[] jobs, in string lockFile)
     {
-        // join file contents into string and write to file
-        jobs.map!(job => job.pid ~ " " ~ job.jobFile)
-            .join(newline)
-            .write(lockFile);
+        // join file contents into string
+        auto contents = jobs
+            .map!(job => job.pid ~ " " ~ job.jobFile)
+            .join(newline);
+
+        // write to file
+        fileWrite(lockFile, contents);
     }
 
     static bool isLocked(in LockedJob[] jobs, in string pidOrJobFile)
@@ -527,8 +530,40 @@ void serve(in string jobFile)
     immutable logFilePath = configDir.buildPath(jobFile.baseName.setExtension(".log"));
     auto logFile = File(logFilePath, "a");
 
+    // serve job file
+    try 
+    {
+        // spawn process
+        auto pid = spawnProcess(
+            args, 
+            stdout: logFile, 
+            stderr: logFile,
+        );
 
-    // TODO: implement serving in a separate process
+        // validate that the process started
+        Thread.sleep(dur!"msecs"(300));
+        auto ret = tryWait(pid);
+        if (ret.terminated)
+        {
+            log("Process failed to start, exited with code:", ret.status);
+            return;
+        }
+
+        // save to lock file
+        auto pidString = pid.processID.to!string;
+        jobs = LockedJob.parseFile(lockFile); // read the latest changes
+        jobs ~= LockedJob(pidString, jobFile);
+        LockedJob.writeFile(jobs, lockFile);
+
+        // report to user
+        logf("Started jobby daemon with PID %s for job file: %s\n", pidString, jobFile);
+        logf("Daemon output will be logged to: %s\n", logFilePath);
+        logf("Use 'jobby stop %s' to stop the daemon.\n", pidString);
+    }
+    catch (Exception e)
+    {
+        log("Error starting daemon:", e.msg);
+    }
 }
 
 void stop(in string jobFileOrPid) {}
