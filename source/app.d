@@ -14,13 +14,14 @@ import std.file : exists,
                   fileWrite = write,
                   readText,
                   thisExePath;
+import std.ascii : newline;
 import std.array : split, array, join;
-import std.stdio : write, writef;
+import std.stdio : write, writef, File;
 import std.string : splitLines, isNumeric, strip;
 import std.format : format, formattedRead;
-import std.process : spawnShell;
+import std.process : spawnShell, spawnProcess;
 import std.datetime : Clock, DayOfWeek, SysTime;
-import std.algorithm : canFind, startsWith, any, filter;
+import std.algorithm : canFind, startsWith, any, filter, map;
 
 import asol;
 
@@ -459,19 +460,17 @@ struct LockedJob
         return jobs;
     }
 
+    static void writeFile(in LockedJob[] jobs, in string lockFile)
+    {
+        // join file contents into string and write to file
+        jobs.map!(job => job.pid ~ " " ~ job.jobFile)
+            .join(newline)
+            .write(lockFile);
+    }
+
     static bool isLocked(in LockedJob[] jobs, in string pidOrJobFile)
     {
         return jobs.any!(job => job.pid == pidOrJobFile || job.jobFile == pidOrJobFile);
-    }
-
-    static void add(in string pid, in string jobFile)
-    {
-        // TODO: 
-    }
-
-    static void remove(in string pidOrJobFile)
-    {
-        // TODO: 
     }
 }
 
