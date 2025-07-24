@@ -15,13 +15,17 @@ import std.file : exists,
                   readText,
                   thisExePath;
 import std.ascii : newline;
-import std.array : split, array, join;
+import std.array : split, array, join, empty;
 import std.stdio : write, writef, File;
 import std.string : splitLines, isNumeric, strip;
 import std.format : format, formattedRead;
-import std.process : spawnShell, spawnProcess, tryWait, Config;
+import std.process : spawnShell, 
+                     spawnProcess, 
+                     tryWait, 
+                     kill,
+                     Pid;
 import std.datetime : Clock, DayOfWeek, SysTime;
-import std.algorithm : canFind, startsWith, any, filter, map;
+import std.algorithm : canFind, find, startsWith, any, filter, map;
 
 import asol;
 
@@ -566,7 +570,53 @@ void serve(in string jobFile)
     }
 }
 
-void stop(in string jobFileOrPid) {}
+void stop(in string jobFileOrPid) 
+{
+    // parse running jobs
+    auto jobs = LockedJob.parseFile(lockFile);
+
+    // no jobs are running
+    if (!jobs.length)
+    {
+        log("No jobs are running!");
+        return;
+    }
+
+    // find job we need to stop
+    auto tmp = jobs.find!(job => job.pid == jobFileOrPid || job.jobFile == jobFileOrPid);
+    if (tmp.empty())
+    {
+        log("Job not found:", jobFileOrPid);
+        log("Maybe use 'jobby list' to see running jobs.");
+        return;
+    }
+    auto jobToStop = tmp[0];
+
+    // stop job
+    try 
+    {
+        // TODO: implement, does not work
+        // convert PID to object and kill process
+        immutable pid = new Pid(jobToStop.pid.to!int, true);
+        kill(pid, SIGTERM);
+
+        // check process status
+        auto ret = tryWait(pid);
+        if (ret.terminated)
+        {
+            logf("Stopped daemon with PID=%s: %s\n", jobToStop.pid, jobToStop.jobFile);
+        }
+    }
+    catch (Exception e)
+    {
+        logf("Failed to stop process with PID %s: %s\n", jobToStop.pid, e.msg);
+        log("Removed dead process from lock file.");
+    }
+
+    // remove from lock file
+    auto remainingJobs = jobs.filter!(job => job.pid != jobToStop.pid).array;
+    LockedJob.writeFile(remainingJobs, lockFile);
+}
 
 void list(in string lockFile) {
     // parse running jobs
