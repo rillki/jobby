@@ -592,30 +592,16 @@ void stop(in string jobFileOrPid)
     }
     auto jobToStop = tmp[0];
 
-    // stop job
-    try 
+    // terminate process
+    if (killProcess(jobToStop.pid.to!int))
     {
-        // TODO: implement, does not work
-        // convert PID to object and kill process
-        immutable pid = new Pid(jobToStop.pid.to!int, true);
-        kill(pid, SIGTERM);
-
-        // check process status
-        auto ret = tryWait(pid);
-        if (ret.terminated)
-        {
-            logf("Stopped daemon with PID=%s: %s\n", jobToStop.pid, jobToStop.jobFile);
-        }
+        logf("Stopped daemon with PID=%s: %s\n", jobToStop.pid, jobToStop.jobFile);
+        
+        // remove from lock file
+        auto remainingJobs = jobs.filter!(job => job.pid != jobToStop.pid).array;
+        LockedJob.writeFile(remainingJobs, lockFile);
     }
-    catch (Exception e)
-    {
-        logf("Failed to stop process with PID %s: %s\n", jobToStop.pid, e.msg);
-        log("Removed dead process from lock file.");
-    }
-
-    // remove from lock file
-    auto remainingJobs = jobs.filter!(job => job.pid != jobToStop.pid).array;
-    LockedJob.writeFile(remainingJobs, lockFile);
+    else logf("Failed to stop process with PID=%s: %s\n", jobToStop.pid, jobToStop.jobFile);
 }
 
 void list(in string lockFile) {
@@ -721,4 +707,58 @@ bool validate(in string jobFile, in bool verbose = true)
 
     return statusOk;
 }
+
+bool killProcess(in int pid)
+{
+    import std.datetime.stopwatch : StopWatch, AutoStart;
+    import std.datetime : msecs, seconds;
+    auto timeout = 5.seconds;
+
+    version (Windows)
+    {
+        import core.sys.windows.windows :
+            OpenProcess, TerminateProcess, CloseHandle,
+            WaitForSingleObject, PROCESS_TERMINATE, PROCESS_QUERY_INFORMATION,
+            SYNCHRONIZE, INFINITE, WAIT_OBJECT_0;
+
+        // create process handle
+        enum PROCESS_ACCESS = PROCESS_TERMINATE | PROCESS_QUERY_INFORMATION | SYNCHRONIZE;
+        auto handle = OpenProcess(PROCESS_ACCESS, false, cast(uint)pid);
+        if (handle is null) return false;
+        scope (exit) CloseHandle(handle);
+
+        // try graceful termination (Windows doesn't support SIGTERM)
+        if (!TerminateProcess(handle, 1)) return false;
+
+        // wait for process to actually exit
+        auto result = WaitForSingleObject(handle, cast(uint)timeout.total!"msecs");
+        return result == WAIT_OBJECT_0;
+    }
+    else version (Posix)
+    {
+        import core.sys.posix.signal : kill, SIGTERM, SIGKILL;
+        import core.sys.posix.sys.wait : waitpid, WNOHANG, WIFEXITED, WIFSIGNALED;
+
+        // try graceful kill
+        if (kill(pid, SIGTERM) != 0) 
+        {
+            return false;
+        }
+
+        // check for status
+        int status = 0;
+        waitpid(pid, &status, WNOHANG);
+        if (WIFEXITED(status) || WIFSIGNALED(status)) 
+        {
+            return true;
+        }
+
+        return kill(pid, SIGKILL) != 0;
+    }
+    else
+    {
+        static assert(false, "Unsupported platform");
+    }
+}
+
 
