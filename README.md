@@ -63,6 +63,7 @@ $ jobby list
   PID   Jobs file
 34019   /home/user/.jobby/jobs.cfg
 ```
+This information is logged into an internal `~/.jobby/jobs.lock` file. 
 
 ### Stop running daemon
 ```sh
