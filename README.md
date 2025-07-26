@@ -51,12 +51,24 @@ Run your custom jobs file as daemon process:
 ```sh
 # By default `~/.jobby/jobs.cfg` is used, unless a custom one is specified.
 $ jobby serve <jobsFileName.cfg>
+jobby :: Started jobby daemon with PID 34019 for job file: /home/user/.jobby/jobs.cfg
+jobby :: Daemon output will be logged to: /home/user/.jobby/jobs.log
+jobby :: Use 'jobby stop 34019' to stop the daemon.
+```
+
+### See running daemons
+Track all running jobs:
+```sh
+$ jobby list
+  PID   Jobs file
+34019   /home/user/.jobby/jobs.cfg
 ```
 
 ### Stop running daemon
 ```sh
 # By default `~/.jobby/jobs.cfg` is used, unless a custom one is specified.
 $ jobby stop <jobsFileName.cfg or PID>
+jobby :: Stopped daemon with PID=34019: /home/user/.jobby/jobs.cfg
 ```
 
 ## Planned
