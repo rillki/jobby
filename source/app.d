@@ -761,4 +761,43 @@ bool killProcess(in int pid)
     }
 }
 
+bool processIsRunning(in int pid)
+{
+    version(Posix)
+    {
+        import core.sys.posix.signal : kill;
+        
+        // send signal 0 (null signal) to test if process exists
+        // this doesn't actually send a signal, just checks if we can
+        int result = kill(pid, 0);
+        return result == 0;
+    }
+    else version(Windows)
+    {
+        import core.sys.windows.windows : 
+            OpenProcess, CloseHandle, GetExitCodeProcess, 
+            PROCESS_QUERY_INFORMATION, STILL_ACTIVE;
+        
+        // try to open the process handle
+        auto handle = OpenProcess(PROCESS_QUERY_INFORMATION, false, cast(uint)pid);
+        if (handle is null)
+        {
+            return false; // process doesn't exist or no permission
+        }
+        scope(exit) CloseHandle(handle);
+        
+        // check if the process is still running
+        uint exitCode;
+        if (GetExitCodeProcess(handle, &exitCode))
+        {
+            return exitCode == STILL_ACTIVE;
+        }
+        
+        return false; // failed to get exit code
+    }
+    else
+    {
+        static assert(false, "Unsupported platform");
+    }
+}
 
