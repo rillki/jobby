@@ -35,15 +35,17 @@ auto log(Args...)(Args args) => logPrint!(" ", "\n", lh)(args);
 auto logf(Args...)(in string format, Args args) => logPrintf!(lh)(format, args);
 
 // usage manual
-enum version_ = "1.0.0";
+enum version_ = "1.1.0";
 enum usage = q{jobby v%s -- A simple task scheduler and executor supporting multiple job files.
 USAGE: jobby [command] <jobs.cfg>
 COMMANDS:
-      run  run with custom job.cfg
-    serve  launch in background with custom jobs.cfg
-     stop  stop daemon identified with custom jobs.cfg or PID
-     list  list running jobs
- validate  validate jobs.cfg format
+      run  run with custom job.cfg file.
+    serve  launch in background with custom jobs.cfg file.
+     stop  stop daemon identified with custom jobs.cfg or PID.
+     list  list all launched jobs.
+    check  check all dead daemon jobs.
+  restart  restart all previously running daemons that are not running.
+ validate  validate jobs.cfg format.
  help-fmt  job configuration file format documentation and examples.
      help  This help message.
 NOTE:
@@ -143,6 +145,12 @@ void main(string[] args)
             break;
         case "list":
             list(lockFile);
+            break;
+        case "check":
+            check(lockFile);
+            break;
+        case "restart":
+            restart(lockFile);
             break;
         case "validate":
             validate(argFileOrPid); // @suppress(dscanner.unused_result)
@@ -596,12 +604,16 @@ void stop(in string jobFileOrPid)
     if (killProcess(jobToStop.pid.to!int))
     {
         logf("Stopped daemon with PID=%s: %s\n", jobToStop.pid, jobToStop.jobFile);
-        
-        // remove from lock file
-        auto remainingJobs = jobs.filter!(job => job.pid != jobToStop.pid).array;
-        LockedJob.writeFile(remainingJobs, lockFile);
     }
-    else logf("Failed to stop process with PID=%s: %s\n", jobToStop.pid, jobToStop.jobFile);
+    else 
+    {
+        logf("Failed to stop process with PID=%s: %s\n", jobToStop.pid, jobToStop.jobFile);
+        log("Removed dead process from lock file.");
+    }
+
+    // remove from lock file
+    auto remainingJobs = jobs.filter!(job => job.pid != jobToStop.pid).array;
+    LockedJob.writeFile(remainingJobs, lockFile);
 }
 
 void list(in string lockFile) {
@@ -620,6 +632,35 @@ void list(in string lockFile) {
     foreach (job; jobs)
     {
         writef("%5s\t%s\n", job.pid, job.jobFile);
+    }
+}
+
+void check(in string lockFile)
+{
+    assert(0, "UNIMPLEMENTED");
+}
+
+void restart(in string lockFile)
+{
+    // parse running jobs
+    auto jobs = LockedJob.parseFile(lockFile);
+
+    // no jobs are running
+    if (!jobs.length)
+    {
+        log("No jobs are running! Nothing to restart.");
+        return;
+    }
+
+    // restart jobs
+    foreach (job; jobs)
+    {
+        if (!processIsRunning(job.pid.to!int))
+        {
+            log("Restarting daemon:", job.jobFile);
+            stop(job.jobFile);
+            serve(job.jobFile);
+        }
     }
 }
 
@@ -706,98 +747,5 @@ bool validate(in string jobFile, in bool verbose = true)
     }
 
     return statusOk;
-}
-
-bool killProcess(in int pid)
-{
-    import std.datetime.stopwatch : StopWatch, AutoStart;
-    import std.datetime : msecs, seconds;
-    auto timeout = 5.seconds;
-
-    version (Windows)
-    {
-        import core.sys.windows.windows :
-            OpenProcess, TerminateProcess, CloseHandle,
-            WaitForSingleObject, PROCESS_TERMINATE, PROCESS_QUERY_INFORMATION,
-            SYNCHRONIZE, INFINITE, WAIT_OBJECT_0;
-
-        // create process handle
-        enum PROCESS_ACCESS = PROCESS_TERMINATE | PROCESS_QUERY_INFORMATION | SYNCHRONIZE;
-        auto handle = OpenProcess(PROCESS_ACCESS, false, cast(uint)pid);
-        if (handle is null) return false;
-        scope (exit) CloseHandle(handle);
-
-        // try graceful termination (Windows doesn't support SIGTERM)
-        if (!TerminateProcess(handle, 1)) return false;
-
-        // wait for process to actually exit
-        auto result = WaitForSingleObject(handle, cast(uint)timeout.total!"msecs");
-        return result == WAIT_OBJECT_0;
-    }
-    else version (Posix)
-    {
-        import core.sys.posix.signal : kill, SIGTERM, SIGKILL;
-        import core.sys.posix.sys.wait : waitpid, WNOHANG, WIFEXITED, WIFSIGNALED;
-
-        // try graceful kill
-        if (kill(pid, SIGTERM) != 0) 
-        {
-            return false;
-        }
-
-        // check for status
-        int status = 0;
-        waitpid(pid, &status, WNOHANG);
-        if (WIFEXITED(status) || WIFSIGNALED(status)) 
-        {
-            return true;
-        }
-
-        return kill(pid, SIGKILL) != 0;
-    }
-    else
-    {
-        static assert(false, "Unsupported platform");
-    }
-}
-
-bool processIsRunning(in int pid)
-{
-    version(Posix)
-    {
-        import core.sys.posix.signal : kill;
-        
-        // send signal 0 (null signal) to test if process exists
-        // this doesn't actually send a signal, just checks if we can
-        int result = kill(pid, 0);
-        return result == 0;
-    }
-    else version(Windows)
-    {
-        import core.sys.windows.windows : 
-            OpenProcess, CloseHandle, GetExitCodeProcess, 
-            PROCESS_QUERY_INFORMATION, STILL_ACTIVE;
-        
-        // try to open the process handle
-        auto handle = OpenProcess(PROCESS_QUERY_INFORMATION, false, cast(uint)pid);
-        if (handle is null)
-        {
-            return false; // process doesn't exist or no permission
-        }
-        scope(exit) CloseHandle(handle);
-        
-        // check if the process is still running
-        uint exitCode;
-        if (GetExitCodeProcess(handle, &exitCode))
-        {
-            return exitCode == STILL_ACTIVE;
-        }
-        
-        return false; // failed to get exit code
-    }
-    else
-    {
-        static assert(false, "Unsupported platform");
-    }
 }
 
