@@ -147,7 +147,7 @@ void main(string[] args)
             list(lockFile);
             break;
         case "check":
-            check(lockFile);
+            check(lockFile); // @suppress(dscanner.unused_result)
             break;
         case "restart":
             restart(lockFile);
@@ -583,10 +583,10 @@ void stop(in string jobFileOrPid)
     // parse running jobs
     auto jobs = LockedJob.parseFile(lockFile);
 
-    // no jobs are running
+    // no jobs
     if (!jobs.length)
     {
-        log("No jobs are running!");
+        log("No jobs found!");
         return;
     }
 
@@ -620,10 +620,10 @@ void list(in string lockFile) {
     // parse running jobs
     auto jobs = LockedJob.parseFile(lockFile);
 
-    // no jobs are running
+    // no jobs
     if (!jobs.length)
     {
-        log("No jobs are running!");
+        log("No jobs found!");
         return;
     }
 
@@ -635,32 +635,47 @@ void list(in string lockFile) {
     }
 }
 
-void check(in string lockFile)
-{
-    assert(0, "UNIMPLEMENTED");
-}
-
-void restart(in string lockFile)
+LockedJob[] check(in string lockFile)
 {
     // parse running jobs
     auto jobs = LockedJob.parseFile(lockFile);
 
-    // no jobs are running
+    // no jobs
     if (!jobs.length)
     {
-        log("No jobs are running! Nothing to restart.");
-        return;
+        log("No jobs found! Nothing to check.");
+        return [];
     }
 
-    // restart jobs
-    foreach (job; jobs)
+    // filter out dead jobs
+    LockedJob[] deadJobs = jobs.filter!(job => !processIsRunning(job.pid.to!int)).array;
+    if (deadJobs.empty)
     {
-        if (!processIsRunning(job.pid.to!int))
-        {
-            log("Restarting daemon:", job.jobFile);
-            stop(job.jobFile);
-            serve(job.jobFile);
-        }
+        log("All good.");
+        return [];
+    }
+    
+    // output running job files
+    writef("%5s\t%s\n", "PID", "Jobs file (dead daemon)");
+    foreach (job; deadJobs)
+    {
+        writef("%5s\t%s\n", job.pid, job.jobFile);
+    }
+
+    return deadJobs;
+}
+
+void restart(in string lockFile)
+{
+    // find dead daemons
+    auto deadJobs = check(lockFile);
+
+    // restart jobs
+    foreach (job; deadJobs)
+    {
+        log("Restarting daemon:", job.jobFile);
+        stop(job.jobFile);
+        serve(job.jobFile);
     }
 }
 
