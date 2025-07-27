@@ -94,7 +94,7 @@ $ jobby list
   PID   Jobs file
 34019   /home/user/.jobby/jobs.cfg
 ```
-**NOTE:** This list is tracked in ~/.jobby/jobs.lock. It does not guarantee the processes are still running.
+**NOTE:** This list is tracked in `~/.jobby/jobs.lock`. It does not guarantee the processes are still running.
 
 ### Check for dead deamons
 Identify jobs whose daemons are no longer running:
