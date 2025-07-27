@@ -11,10 +11,11 @@ import std.path : expandTilde,
                   absolutePath;
 import std.file : exists,
                   mkdir,
+                  getSize,
                   fileWrite = write,
                   readText,
                   thisExePath;
-import std.ascii : newline;
+import std.ascii : newline, isAlpha;
 import std.array : split, array, join, empty;
 import std.stdio : write, writef, File;
 import std.string : splitLines, isNumeric, strip;
@@ -35,7 +36,7 @@ auto log(Args...)(Args args) => logPrint!(" ", "\n", lh)(args);
 auto logf(Args...)(in string format, Args args) => logPrintf!(lh)(format, args);
 
 // usage manual
-enum version_ = "1.1.0";
+enum version_ = "1.1.2";
 enum usage = q{jobby v%s -- A simple task scheduler and executor supporting multiple job files.
 USAGE: jobby [command] <jobs.cfg>
 COMMANDS:
@@ -100,16 +101,51 @@ EXAMPLE:
 }.format(version_, jobComponents); // @suppress(dscanner.style.long_line)
 
 // jobby initialization
-string configDir, defaultJobFile, lockFile;
+int logFileSize = 2;
+string configDir, configFile, defaultJobFile, lockFile;
 static this()
 {
     // configure config dir
     configDir = "~/.jobby".expandTilde;
-    defaultJobFile = "~/.jobby/jobs.cfg".expandTilde;
-    lockFile = "~/.jobby/jobs.lock".expandTilde;
+    configFile = configDir.buildPath("config.yaml");
+    defaultJobFile = configDir.buildPath("jobs.cfg");
+    lockFile = configDir.buildPath("jobs.lock");
 
     // create neccessary files and directories
     if (!configDir.exists) configDir.mkdir;
+    if (!configFile.exists) 
+    {
+        fileWrite(configFile, "# k, m, g\nlog-file-size: 2m");
+    }
+    else // try to parse
+    {
+        try
+        {
+            // parse file
+            immutable config = configFile
+                .readText
+                .splitLines
+                .filter!(line => line[0] != '#' && !line.strip.empty)
+                .array[0]
+                .split(":");
+            immutable unit = config[1][$-1];
+            
+            // validate
+            if (!isAlpha(unit)) throw new Exception("Unit not specified (k, m, g).");
+
+            // convert to bytes
+            enum kb = 1024;
+            immutable value = config[1][0 .. $-1].strip.to!int;
+            if (unit == 'k') logFileSize = value * kb;
+            else if (unit == 'm') logFileSize = value * kb * kb;
+            else logFileSize = value * kb * kb * kb; // gb
+        }
+        catch (Exception e)
+        {
+            log("Config file uses YAML format! Fallback to default values.");
+            log("Parsing error:", e.msg);
+        }
+    }
     if (!defaultJobFile.exists) fileWrite(defaultJobFile, "");
     if (!lockFile.exists) fileWrite(lockFile, "");
 }
@@ -184,7 +220,7 @@ struct Task
         auto lines = jobFile
             .readText
             .splitLines
-            .filter!(x => x[0] != '#')
+            .filter!(line => line[0] != '#')
             .array;
 
         // no tasks found
@@ -454,7 +490,7 @@ struct LockedJob
         auto lines = lockFile
             .readText
             .splitLines
-            .filter!(x => x[0] != '#')
+            .filter!(line => line[0] != '#')
             .array;
 
         // no jobs found
@@ -540,6 +576,7 @@ void serve(in string jobFile)
     immutable executablePath = thisExePath();
     immutable args = [executablePath, "run", jobFile.absolutePath()];
     immutable logFilePath = configDir.buildPath(jobFile.baseName.setExtension(".log"));
+    if (exists(logFilePath) && logFilePath.getSize() >= logFileSize) fileWrite(logFilePath, "");
     auto logFile = File(logFilePath, "a");
 
     // serve job file
