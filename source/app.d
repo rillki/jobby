@@ -26,7 +26,7 @@ import std.process : spawnShell,
                      kill,
                      Pid;
 import std.datetime : Clock, DayOfWeek, SysTime;
-import std.algorithm : canFind, find, startsWith, any, filter, map;
+import std.algorithm : canFind, find, findSplit, startsWith, any, filter, map;
 
 import asol;
 
@@ -36,7 +36,7 @@ auto log(Args...)(Args args) => logPrint!(" ", "\n", lh)(args);
 auto logf(Args...)(in string format, Args args) => logPrintf!(lh)(format, args);
 
 // usage manual
-enum version_ = "1.1.0";
+enum version_ = "1.1.1";
 enum usage = q{jobby v%s -- A simple task scheduler and executor supporting multiple job files.
 USAGE: jobby [command] <jobs.cfg>
 COMMANDS:
@@ -220,7 +220,8 @@ struct Task
         auto lines = jobFile
             .readText
             .splitLines
-            .filter!(line => line[0] != '#')
+            .map!(line => line.strip)
+            .filter!(line => !line.empty && line[0] != '#')
             .array;
 
         // no tasks found
@@ -490,7 +491,8 @@ struct LockedJob
         auto lines = lockFile
             .readText
             .splitLines
-            .filter!(line => line[0] != '#')
+            .map!(line => line.strip)
+            .filter!(line => !line.empty && line[0] != '#')
             .array;
 
         // no jobs found
@@ -721,7 +723,9 @@ bool validate(in string jobFile, in bool verbose = true)
     // split tasks to lines
     auto tasks = jobFile
         .readText
-        .splitLines;
+        .splitLines
+        .map!(line => line.strip)
+        .array;
     bool statusOk = true;
 
     void logError(in string jobFile, in string task, in size_t line, in string msg = "")
@@ -746,7 +750,7 @@ bool validate(in string jobFile, in bool verbose = true)
         immutable line = i + 1;
 
         // skip comments
-        if (task.startsWith("#")) continue;
+        if (task.startsWith("#") || task.empty) continue;
 
         // check items
         if (!task.canFind(commandDelimiter))
@@ -756,8 +760,15 @@ bool validate(in string jobFile, in bool verbose = true)
             continue;
         }
 
+        // split into components
+        auto components = task
+            .findSplit(commandDelimiter)
+            .array
+            .map!(component => component.strip)
+            .filter!(a => a.length && a != commandDelimiter)
+            .array;
+        
         // check number of components: datetime and command
-        auto components = task.split(commandDelimiter).filter!(a => a.length).array;
         if (components.length != 2)
         {
             logError(jobFile, task, line, "Command was not specified!");
