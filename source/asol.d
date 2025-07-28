@@ -176,7 +176,7 @@ string formatFileSize(in ulong bytes)
     import std.format : format;
     
     // format
-    enum kn = 1024;
+    enum kb = 1024;
     if (bytes < kb) return format("%d B", bytes);
     else if (bytes < kb * kb) return format("%.1f KB", bytes / kb);
     else if (bytes < kb * kb * kb) return format("%.1f MB", bytes / (kb * kb));
