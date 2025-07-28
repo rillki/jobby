@@ -52,7 +52,6 @@ string[] listdir(in string dir, in bool ignoreDotFiles = false, in SpanMode mode
         : dirEntries(dir, mode).map!(a => a.name).array;
 }
 
-
 /**
  * PROCESS
  */
@@ -160,5 +159,27 @@ bool processIsRunning(in int pid)
     {
         static assert(false, "Unsupported platform");
     }
+}
+
+/**
+ * Miscellaneous
+ */
+
+/++
+ + Format file size with memory unit '%.1f B, KB, MB, GB'.
+ + Params:
+ +   bytes = file size in bytes
+ + Returns: formatted string with correct unit.
+ +/
+string formatFileSize(in ulong bytes)
+{
+    import std.format : format;
+    
+    // format
+    enum kn = 1024;
+    if (bytes < kb) return format("%d B", bytes);
+    else if (bytes < kb * kb) return format("%.1f KB", bytes / kb);
+    else if (bytes < kb * kb * kb) return format("%.1f MB", bytes / (kb * kb));
+    else return format("%.1f GB", bytes / (kb * kb * kb));
 }
 
