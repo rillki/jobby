@@ -27,6 +27,7 @@ import std.process : spawnShell,
                      Pid;
 import std.datetime : Clock, DayOfWeek, SysTime;
 import std.algorithm : canFind, find, findSplit, startsWith, any, filter, map;
+import std.parallelism : parallel;
 
 import asol;
 
@@ -554,7 +555,7 @@ void run(in string jobFile)
     // loop
     while (true)
     {
-        foreach (ref task; tasks)
+        foreach (ref task; tasks.parallel)
         {
             if (task.shouldRun) executeCommand(task.cmd);
         }
