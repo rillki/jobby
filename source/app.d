@@ -44,6 +44,7 @@ COMMANDS:
       run  run with custom job.cfg file.
     serve  launch in background with custom jobs.cfg file.
      stop  stop daemon identified with custom jobs.cfg or PID.
+      log  display log output related to the specified job.cfg file.
      list  list all launched jobs.
     check  check all dead daemon jobs.
   restart  restart all previously running daemons that are not running.
@@ -179,6 +180,9 @@ void main(string[] args)
             break;
         case "stop":
             stop(argFileOrPid);
+            break;
+        case "log":
+            displayLog(argFileOrPid);
             break;
         case "list":
             list(lockFile);
@@ -561,6 +565,43 @@ void run(in string jobFile)
         }
         Thread.sleep(dur!"seconds"(1));
     }
+}
+
+void displayLog(in string jobFile)
+{
+    // setup log file
+    immutable logFilePath = configDir.buildPath(jobFile.baseName.setExtension(".log"));
+    
+    // check if log file exists
+    if (!exists(logFilePath))
+    {
+        log("Log file not found:", logFilePath);
+        log("Make sure the job has been served with 'jobby serve %s'", jobFile);
+        return;
+    }
+
+    // open file
+    auto file = File(logFilePath, "r");
+    if (!file.size) 
+    {
+        log("Log file is empty:", logFilePath);
+        return;
+    }
+
+    // display header
+    logf("=== Log for job file: %s ===\n", jobFile.baseName);
+    log("Log file:", logFilePath);
+    log("Log size:", formatFileSize(file.size));
+    log("--- Log Contents ---");
+    
+    // display file contents
+    write("<<<\n");
+    foreach (line; file.byLine)
+    {
+        writef("%s\n", line);
+    }
+    write(">>>\n");
+    log("--- End of Log ---");
 }
 
 void serve(in string jobFile)
