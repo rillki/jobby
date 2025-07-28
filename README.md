@@ -26,12 +26,13 @@ The binary will be located in the `./bin` folder.
 
 ## Usage
 ```sh
-jobby v1.1.0 -- A simple task scheduler and executor supporting multiple job files.
+jobby v1.2.0 -- A simple task scheduler and executor supporting multiple job files.
 USAGE: jobby [command] <jobs.cfg>
 COMMANDS:
       run  run with custom job.cfg file.
     serve  launch in background with custom jobs.cfg file.
      stop  stop daemon identified with custom jobs.cfg or PID.
+      log  display log output related to the specified job.cfg file.
      list  list all launched jobs.
     check  check all dead daemon jobs.
   restart  restart all previously running daemons that are not running.
@@ -55,22 +56,6 @@ m * * * * * * | echo "Execute every minute."
 ```
 Run `jobby help-fmt` to view additional examples and syntax details. 
 
-Job output (`stdout/stderr`) is logged to `~/.jobby/<jobsFileName>.log`:
-```sh
-Execute once when 'jobby' is launched.
-Execute every second.
-Execute every 5 seconds.
-Execute every 29 seconds.
-Execute every second.
-Execute every second.
-Execute every second.
-Execute every second.
-Execute every second.
-Execute every 5 seconds.
-Execute every second.
-...
-```
-
 ### Log file size
 Specify the maximum log file size in `~/.jobby/config.yaml`:
 ```yaml
@@ -85,6 +70,29 @@ $ jobby serve <jobsFileName.cfg>
 jobby :: Started jobby daemon with PID 34019 for job file: /home/user/.jobby/jobs.cfg
 jobby :: Daemon output will be logged to: /home/user/.jobby/jobs.log
 jobby :: Use 'jobby stop 34019' to stop the daemon.
+```
+
+### View logs
+You can view the log output associated with a specific `job.cfg` file:
+```sh
+$ jobby log <jobsFileName.cfg>
+jobby :: === Log for job file: jobs.cfg ===
+jobby :: Log file: /home/user/.jobby/jobs.log
+jobby :: Log size: 54 B
+jobby :: --- Log Contents ---
+<<<
+Execute once when 'jobby' is launched.
+Execute every second.
+Execute every 5 seconds.
+Execute every 29 seconds.
+Execute every second.
+>>>
+jobby :: --- End of Log ---
+```
+
+Log output (`stdout/stderr`) for each job is written to individual log files located at:
+```sh
+~/.jobby/<jobsFileName>.log
 ```
 
 ### See running daemons
