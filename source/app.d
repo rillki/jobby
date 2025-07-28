@@ -37,7 +37,7 @@ auto log(Args...)(Args args) => logPrint!(" ", "\n", lh)(args);
 auto logf(Args...)(in string format, Args args) => logPrintf!(lh)(format, args);
 
 // usage manual
-enum version_ = "1.1.1";
+enum version_ = "1.2.0";
 enum usage = q{jobby v%s -- A simple task scheduler and executor supporting multiple job files.
 USAGE: jobby [command] <jobs.cfg>
 COMMANDS:
